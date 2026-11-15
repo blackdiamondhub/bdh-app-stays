@@ -145,3 +145,63 @@ class HubGuestModeTests(TestCase):
         cache.clear()
         get.return_value = _state("none")
         self.assertEqual(self.client.get("/hub/api/status/").json()["mode"], "dashboard")
+
+class ManifestTests(SimpleTestCase):
+    def test_hub_api_2_manifest(self):
+        from stays.plugin import spec
+        m = spec.manifest()
+        self.assertEqual(m["api_version"], 2)
+        self.assertEqual((m["network"], m["lifecycle"], m["memory_mb"]), ("none", "always", 96))
+        self.assertEqual((spec.stay, spec.card),
+                         ("stays.homepage.current_stay", "stays.card.lodge_card"))
+
+    def test_permissions_cover_the_default_entities(self):
+        from fnmatch import fnmatchcase
+
+        from stays.plugin import spec
+        globs = [p.split(":", 1)[1] for p in spec.permissions if p.startswith("ha.read:")]
+        for entity_id in [homepage.DEFAULT_ENTITY, *(
+                v for k, v in card.DEFAULTS.items() if k.endswith("_entity"))]:
+            with self.subTest(entity_id):
+                self.assertTrue(any(fnmatchcase(entity_id, g) for g in globs))
+
+
+class BrokerTests(SimpleTestCase):
+    """In its container the app reads Home Assistant through the hub's broker."""
+
+    def setUp(self):
+        from bdh_sdk import settings
+        from bdh_sdk.testing import FakeBroker
+
+        saved = settings._store
+        self.broker = FakeBroker(install=True, app_id="stays")
+        self.broker.start()
+        self.addCleanup(settings.set_store, saved)
+        self.addCleanup(self.broker.stop)
+
+    def test_stay_from_broker(self):
+        self.broker.on("ha.get_entity_state", lambda p: _state(
+            "The Smiths", guest="The Smiths", checkout="2026-11-09T11:00:00-07:00"))
+        stay = homepage.current_stay()
+        self.assertEqual(stay.guest, "The Smiths")
+        self.assertEqual(stay.checkout, datetime(2026, 11, 9, 11, tzinfo=LODGE))
+        self.assertEqual(self.broker.ops("ha.get_entity_state")[0]["entity_id"],
+                         "sensor.bdl_stay_current")
+
+    def test_entity_setting_from_hub(self):
+        self.broker.settings[("stays", "entity")] = "sensor.bdl_stay_other"
+        self.broker.on("ha.get_entity_state", lambda p: _state("none"))
+        self.assertIsNone(homepage.current_stay())
+        self.assertEqual(self.broker.ops("ha.get_entity_state")[0]["entity_id"],
+                         "sensor.bdl_stay_other")
+
+    def test_broker_refusal_keeps_last_stay(self):
+        self.broker.grants = ["settings.*"]
+        with self.assertRaises(Exception):
+            homepage.current_stay()
+
+    def test_card_from_broker(self):
+        self.broker.on("ha.get_all_states", lambda p: _states(**{
+            "input_select.bdl_occupancy": ("home", {})}))
+        c = card.lodge_card()
+        self.assertEqual((c.title, c.detail), ("Lodge empty", "No upcoming stays"))

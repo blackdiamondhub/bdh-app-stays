@@ -44,13 +44,24 @@ fixed. Tapping the card opens the vacation mode page.
 | `BDH_STAYS_INSIDE_ENTITY` | `sensor.main_floor_temperature` | thermostat shown as Inside |
 | `BDH_STAYS_CARD_URL` | `vacation_mode` | URL name the card opens |
 
-Home Assistant URL and token come from the hub (`HOMEASSISTANT_URL`,
-`HOMEASSISTANT_ACCESS_TOKEN`).
+Settings are set on the hub's Settings page. Home Assistant is read through
+the hub's broker; the app has no network access of its own.
+
+## Container (hub API 2)
+
+Since 2.0.0 the app runs in its own container (`api_version=2`,
+`network=none`, `lifecycle=always` because the hub asks for the stay on
+every homepage request, 96 MB). It may only read the entities matching its
+`ha.read` permissions (`sensor.bdl_stay_*` plus the default entities above);
+an entity set outside them reads as missing. The card link (`card_url`) is a
+hub URL name the container can't resolve, so in a container the card has no
+link.
 
 ## Install
 
-Add the hashed line from the latest release to the site's `apps.txt` in
-BlackDiamondHub. Requires a hub on bdh-sdk 0.4 or newer.
+Install from the hub's app store (catalog id `stays`). Running it in the
+hub's own process still works: add the hashed line from the latest release to
+the site's `apps.txt`.
 
 ## Development
 
