@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.urls]
-Source = "https://github.com/blackdiamondlodge/bdh-app-stays"
+Source = "https://github.com/blackdiamondhub/bdh-app-stays"
 
 [project.entry-points."blackdiamondhub.plugins"]
 stays = "stays.plugin:spec"
